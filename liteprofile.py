@@ -303,7 +303,8 @@ a {{ color: inherit; }}
 
 # --- CLI (optional) ---------------------------------------------------------
 if __name__ == "__main__":
-    import argparse, sys, json, os
+    import argparse, sys, os, time
+    from pathlib import Path
 
     p = argparse.ArgumentParser(description="liteprofile - tiny EDA summaries")
     p.add_argument("input", help="Path to a CSV/Parquet file")
@@ -311,36 +312,60 @@ if __name__ == "__main__":
     p.add_argument("--out", help="Write to file (default: stdout)")
     p.add_argument("--top-n-cat", type=int, default=10)
     p.add_argument("--preview", type=int, default=5)
+    p.add_argument("--verbose", "-v", action="store_true", help="Print progress messages")
     args = p.parse_args()
 
-    # Load with polars if possible, otherwise minimal pandas
-    if not os.path.exists(args.input):
-        print(f"File not found: {args.input}", file=sys.stderr)
+    src = Path(args.input)
+    if not src.exists():
+        print(f"[liteprofile] ❌ File not found: {src}", file=sys.stderr)
         sys.exit(2)
 
+    if args.verbose:
+        print(f"[liteprofile] Loading {src} ...")
+
+    # Load with polars if possible, otherwise pandas
     df = None
     try:
         if _HAS_POLARS:
-            if args.input.lower().endswith(".parquet"):
-                df = pl.read_parquet(args.input)
+            if src.suffix.lower() == ".parquet":
+                df = pl.read_parquet(src)
             else:
-                df = pl.read_csv(args.input, infer_schema_length=2000)
+                df = pl.read_csv(src, infer_schema_length=2000)
+            n_rows, n_cols = df.height, len(df.columns)
         elif _HAS_PANDAS:
-            if args.input.lower().endswith(".parquet"):
-                df = pd.read_parquet(args.input)
+            if src.suffix.lower() == ".parquet":
+                df = pd.read_parquet(src)
             else:
-                df = pd.read_csv(args.input)
+                df = pd.read_csv(src)
+            n_rows, n_cols = df.shape
         else:
             raise RuntimeError("Install polars or pandas to load files.")
     except Exception as e:
-        print(f"Failed to load: {e}", file=sys.stderr)
+        print(f"[liteprofile] ❌ Failed to load {src}: {e}", file=sys.stderr)
         sys.exit(3)
 
-    out = profile_html(df, top_n_cat=args.top_n_cat, max_rows_preview=args.preview) if args.html \
-          else profile(df, top_n_cat=args.top_n_cat, max_rows_preview=args.preview)
+    if args.verbose:
+        print(f"[liteprofile] ✅ Loaded dataframe with {n_rows:,} rows and {n_cols} columns")
+
+    t0 = time.perf_counter()
+    out_str = (
+        profile_html(df, top_n_cat=args.top_n_cat, max_rows_preview=args.preview)
+        if args.html
+        else profile(df, top_n_cat=args.top_n_cat, max_rows_preview=args.preview)
+    )
+    dt = time.perf_counter() - t0
 
     if args.out:
-        with open(args.out, "w", encoding="utf-8") as f:
-            f.write(out)
+        out_path = Path(args.out)
+        out_path.write_text(out_str, encoding="utf-8")
+        size_kb = out_path.stat().st_size / 1024
+        kind = "HTML" if args.html else "Markdown"
+        print(
+            f"[liteprofile] ✅ Wrote {kind} report → {out_path} "
+            f"({size_kb:.1f} KB) in {dt:.2f}s — processed {n_rows:,} rows"
+        )
     else:
-        print(out)
+        # print to stdout (Markdown)
+        print(out_str)
+        if args.verbose:
+            print(f"[liteprofile] ✅ Printed report to stdout in {dt:.2f}s — processed {n_rows:,} rows")
