@@ -301,8 +301,8 @@ a {{ color: inherit; }}
 </html>"""
 
 
-# --- CLI (optional) ---------------------------------------------------------
-if __name__ == "__main__":
+# --- CLI entry --------------------------------------------------------------
+def main() -> None:
     import argparse, sys, os, time
     from pathlib import Path
 
@@ -345,7 +345,7 @@ if __name__ == "__main__":
         sys.exit(3)
 
     if args.verbose:
-        print(f"[liteprofile] ✅ Loaded dataframe with {n_rows:,} rows and {n_cols} columns")
+        print(f"[liteprofile] ✅ Loaded dataframe with {n_rows:,} rows × {n_cols} columns")
 
     t0 = time.perf_counter()
     out_str = (
@@ -362,10 +362,14 @@ if __name__ == "__main__":
         kind = "HTML" if args.html else "Markdown"
         print(
             f"[liteprofile] ✅ Wrote {kind} report → {out_path} "
-            f"({size_kb:.1f} KB) in {dt:.2f}s — processed {n_rows:,} rows"
+            f"({size_kb:.1f} KB) in {dt:.2f}s — processed {n_rows:,} rows × {n_cols} columns"
         )
     else:
         # print to stdout (Markdown)
         print(out_str)
         if args.verbose:
-            print(f"[liteprofile] ✅ Printed report to stdout in {dt:.2f}s — processed {n_rows:,} rows")
+            print(f"[liteprofile] ✅ Printed report to stdout in {dt:.2f}s — processed {n_rows:,} rows × {n_cols} columns")
+
+
+if __name__ == "__main__":
+    main()
